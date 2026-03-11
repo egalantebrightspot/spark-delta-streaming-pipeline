@@ -57,12 +57,18 @@ dashboard:  ## Generate the HTML observability dashboard
 
 # ── Validation ───────────────────────────────────────────────────────────────
 
-.PHONY: validate validate-bronze validate-silver validate-gold
+.PHONY: validate validate-bronze validate-silver validate-gold governance e2e resilience
 
 validate: validate-bronze validate-silver validate-gold  ## Run all layer validation scripts
 
 governance:  ## Run deterministic data-quality governance test
 	$(PYTHON) scripts/validate_governance.py
+
+e2e:  ## Run end-to-end integration test (generator -> Bronze -> Silver -> Gold)
+	$(PYTHON) scripts/validate_e2e.py
+
+resilience:  ## Run operational resilience tests (restart, backpressure, late data, drift)
+	$(PYTHON) scripts/validate_resilience.py
 
 validate-bronze:  ## Validate the Bronze Delta table
 	$(PYTHON) scripts/validate_bronze.py

@@ -49,6 +49,14 @@ goto :%~1 2>nul || (
     python scripts\validate_governance.py
     goto :eof
 
+:e2e
+    python scripts\validate_e2e.py
+    goto :eof
+
+:resilience
+    python scripts\validate_resilience.py
+    goto :eof
+
 :validate-bronze
     python scripts\validate_bronze.py
     goto :eof
@@ -133,6 +141,8 @@ goto :%~1 2>nul || (
     echo   Validation:
     echo     make validate           Run all validation scripts
     echo     make governance         Run deterministic governance test
+    echo     make e2e               Run end-to-end integration test
+    echo     make resilience        Run operational resilience tests
     echo     make validate-bronze    Validate Bronze layer
     echo     make validate-silver    Validate Silver layer
     echo     make validate-gold      Validate Gold layer
