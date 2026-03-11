@@ -142,23 +142,28 @@ def add_zscores(df: DataFrame, config: dict) -> DataFrame:
     return df
 
 
-def add_quality_score(df: DataFrame) -> DataFrame:
+def add_quality_score(df: DataFrame, config: dict | None = None) -> DataFrame:
     """Compute a 0.0-1.0 composite data-quality score per record.
 
-    Components
+    Components (configurable via quality.scoring in config.yaml)
     ----------
     completeness : float
         Fraction of non-null optional sensor/metadata fields.
     anomaly_penalty : float
-        1.0 if clean, 0.9 if any anomaly flag is set (anomalous data is
-        still valid data -- just flagged).
+        1.0 if clean, penalty value if any anomaly flag is set.
 
     Final score = completeness * anomaly_penalty.
     """
-    optional_fields = [
+    scoring = {}
+    if config:
+        scoring = config.get("quality", {}).get("scoring", {})
+
+    optional_fields = scoring.get("optional_fields", [
         "temperature", "humidity", "pressure",
         "battery_level", "location", "firmware_version",
-    ]
+    ])
+    penalty_val = scoring.get("anomaly_penalty", 0.9)
+
     n = float(len(optional_fields))
 
     non_null_checks = [
@@ -167,7 +172,7 @@ def add_quality_score(df: DataFrame) -> DataFrame:
     ]
     completeness = reduce(add, non_null_checks) / lit(n)
 
-    anomaly_penalty = when(col("_is_anomaly"), lit(0.9)).otherwise(lit(1.0))
+    anomaly_penalty = when(col("_is_anomaly"), lit(penalty_val)).otherwise(lit(1.0))
 
     return df.withColumn(
         "_quality_score",

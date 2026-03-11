@@ -120,6 +120,49 @@ class TestLoadConfig:
         assert "quality" in config
         assert "gold" in config
 
+    def test_generator_section_present(self):
+        from pipeline.common.utils import load_config
+
+        config = load_config()
+        gen = config["generator"]
+        assert gen["batch_size"] > 0
+        assert gen["interval_seconds"] > 0
+        assert gen["num_devices"] > 0
+        assert 0 < gen["anomaly_probability"] < 1
+
+    def test_quality_scoring_section(self):
+        from pipeline.common.utils import load_config
+
+        config = load_config()
+        scoring = config["quality"]["scoring"]
+        assert 0 < scoring["anomaly_penalty"] < 1
+        assert len(scoring["optional_fields"]) == 6
+        assert "temperature" in scoring["optional_fields"]
+
+    def test_streaming_output_mode(self):
+        from pipeline.common.utils import load_config
+
+        config = load_config()
+        assert config["streaming"]["output_mode"] == "append"
+
+    def test_all_sections_present(self):
+        """Every top-level section the pipeline depends on must exist."""
+        from pipeline.common.utils import load_config
+
+        config = load_config()
+        for section in ["app", "paths", "spark", "streaming",
+                        "generator", "quality", "gold", "monitoring"]:
+            assert section in config, f"Missing config section: {section}"
+
+    def test_docker_and_local_configs_have_same_sections(self):
+        from pipeline.common.utils import load_config
+
+        local_cfg = load_config()
+        docker_cfg = load_config(str(
+            Path(__file__).parent.parent / "infra" / "docker" / "config.docker.yaml"
+        ))
+        assert set(local_cfg.keys()) == set(docker_cfg.keys())
+
 
 # ── ensure_path ──────────────────────────────────────────────────────────────
 

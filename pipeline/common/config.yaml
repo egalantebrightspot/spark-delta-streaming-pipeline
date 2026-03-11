@@ -1,54 +1,146 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# IoT Telemetry Pipeline — Central Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# This file is the single source of truth for all pipeline behavior:
+#   Bronze ingestion, Silver quality rules, Gold aggregations, monitoring.
+#
+# Every threshold, path, window, and weight is defined here so the pipeline
+# behaves consistently across environments.  Override per-environment via
+# the PIPELINE_CONFIG_PATH env var (see pipeline/common/utils.py).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 app:
   name: distributed-data-pipeline
-  environment: local
+  environment: local                   # local | docker | staging | production
+
+
+# ── Data Paths ───────────────────────────────────────────────────────────────
+# All paths are relative to the working directory (local) or absolute (Docker).
+# The pipeline creates directories automatically via ensure_path().
 
 paths:
-  bronze_input: data/bronze_input
-  delta_bronze: data/delta/bronze
-  delta_silver: data/delta/silver
-  delta_gold: data/delta/gold
-  checkpoints: data/delta/checkpoints
+  bronze_input: data/bronze_input       # Landing zone for raw JSON files
+  delta_bronze: data/delta/bronze       # Bronze Delta table
+  delta_silver: data/delta/silver       # Silver Delta table
+  delta_gold:   data/delta/gold         # Gold Delta tables (subdirs per table)
+  checkpoints:  data/delta/checkpoints  # Streaming checkpoint root
+                                        #   /bronze and /silver subdirs created at runtime
+
+
+# ── Spark Session ────────────────────────────────────────────────────────────
 
 spark:
-  master: local[*]
+  master: "local[*]"                   # local[*] | local[N] | spark://host:7077
   app_name: iot-telemetry-pipeline
-  log_level: WARN
-  shuffle_partitions: 4
+  log_level: WARN                      # ALL | DEBUG | INFO | WARN | ERROR
+  shuffle_partitions: 4                # Low for local dev; increase to 200+ for cluster
+
+
+# ── Streaming Configuration ──────────────────────────────────────────────────
+# Controls how Bronze and Silver structured streaming jobs consume and produce.
 
 streaming:
-  trigger_interval: 10 seconds
-  max_files_per_trigger: 100
-  output_mode: append
+  trigger_interval: 10 seconds         # ProcessingTime trigger interval
+  max_files_per_trigger: 100           # Max source JSON files per micro-batch
+  output_mode: append                  # append is the only valid mode for file→Delta
+
+
+# ── Data Generator ───────────────────────────────────────────────────────────
+# Synthetic IoT telemetry generator settings (generator/iot_telemetry_generator.py).
+
+generator:
+  batch_size: 20                       # Events per JSON file
+  interval_seconds: 5                  # Seconds between batch writes
+  num_devices: 50                      # Size of the simulated device fleet
+  anomaly_probability: 0.05            # Fraction of events with injected anomalies
+
+
+# ── Data Quality Rules (Silver Layer) ────────────────────────────────────────
+# Defines anomaly thresholds, z-score baselines, and quality scoring used
+# by pipeline/silver_transform/quality_rules.py.
 
 quality:
-  max_temperature: 150.0
-  min_temperature: -50.0
-  max_humidity: 100.0
-  min_humidity: 0.0
-  max_pressure: 1100.0
-  min_pressure: 900.0
+
+  # Anomaly detection thresholds.
+  # Readings OUTSIDE these ranges are flagged.
+  # Boundaries are inclusive: exactly min or exactly max is NOT anomalous.
+  max_temperature: 150.0               # °C — above this → _is_temp_anomaly
+  min_temperature: -50.0               # °C — below this → _is_temp_anomaly
+  max_humidity: 100.0                  # %RH — above this → _is_humidity_anomaly
+  min_humidity: 0.0                    # %RH — below this → _is_humidity_anomaly
+  max_pressure: 1100.0                 # hPa — above this → _is_pressure_anomaly
+  min_pressure: 900.0                  # hPa — below this → _is_pressure_anomaly
+
+  # Streaming deduplication watermark.
+  # Records older than this many hours behind the current watermark are
+  # eligible for late-data discard. Controls memory vs completeness tradeoff.
   dedup_window_hours: 24
+
+  # Population statistics for z-score computation.
+  # z = (observed - mean) / stddev
+  # |z| > 3 indicates a statistical outlier even if within hard thresholds.
+  # Derived from historical baseline data for the sensor fleet.
   expected:
     temperature:
-      mean: 22.0
-      stddev: 5.0
+      mean: 22.0                       # °C — expected fleet average
+      stddev: 5.0                      # °C — expected fleet standard deviation
     humidity:
-      mean: 55.0
+      mean: 55.0                       # %RH
       stddev: 10.0
     pressure:
-      mean: 1013.25
+      mean: 1013.25                    # hPa (standard atmospheric pressure)
       stddev: 10.0
 
+  # Composite quality score parameters.
+  # final_score = completeness * anomaly_penalty
+  #   completeness    = non-null count of optional_fields / total optional_fields
+  #   anomaly_penalty = 1.0 if clean, penalty value if any anomaly flag is set
+  scoring:
+    anomaly_penalty: 0.9               # Multiplier applied when _is_anomaly is True
+    optional_fields:                   # Fields counted toward completeness
+      - temperature
+      - humidity
+      - pressure
+      - battery_level
+      - location
+      - firmware_version
+
+
+# ── Gold Layer Aggregations ──────────────────────────────────────────────────
+# Windowed aggregations computed by pipeline/gold_aggregations/.
+
 gold:
-  window_duration: 1 hour
+  window_duration: 1 hour              # Time window for all device-level aggregates
+
+  # Composite health score weights (must sum to 1.0).
+  #
+  #   health = w_quality     * avg_quality_score
+  #          + w_anomaly     * (1 - anomaly_rate)
+  #          + w_battery     * (avg_battery_level / 100)
+  #
+  # Adjust weights to prioritize different operational concerns:
+  #   Higher quality weight   → penalize missing/incomplete data
+  #   Higher anomaly weight   → penalize sensor faults
+  #   Higher battery weight   → penalize devices approaching failure
   health_weights:
     quality: 0.4
     anomaly_rate: 0.3
     battery: 0.3
+
+  # Risk tier classification thresholds.
+  #   healthy  = health_score >= 0.8
+  #   warning  = health_score >= 0.5
+  #   critical = health_score <  0.5
   risk_tiers:
     healthy: 0.8
     warning: 0.5
 
+
+# ── Monitoring & Observability ───────────────────────────────────────────────
+
 monitoring:
-  metrics_interval_seconds: 30
-  dashboard_port: 8050
+  metrics_interval_seconds: 30         # Reserved: future real-time metrics push interval
+  dashboard_port: 8050                 # Reserved: future live dashboard server port

@@ -1,3 +1,6 @@
+# Docker environment configuration overlay.
+# Mirrors pipeline/common/config.yaml with container-absolute paths.
+
 app:
   name: distributed-data-pipeline
   environment: docker
@@ -6,11 +9,11 @@ paths:
   bronze_input: /app/data/bronze_input
   delta_bronze: /app/data/delta/bronze
   delta_silver: /app/data/delta/silver
-  delta_gold: /app/data/delta/gold
-  checkpoints: /app/data/delta/checkpoints
+  delta_gold:   /app/data/delta/gold
+  checkpoints:  /app/data/delta/checkpoints
 
 spark:
-  master: local[*]
+  master: "local[*]"
   app_name: iot-telemetry-pipeline-docker
   log_level: WARN
   shuffle_partitions: 4
@@ -19,6 +22,12 @@ streaming:
   trigger_interval: 10 seconds
   max_files_per_trigger: 100
   output_mode: append
+
+generator:
+  batch_size: 20
+  interval_seconds: 5
+  num_devices: 50
+  anomaly_probability: 0.05
 
 quality:
   max_temperature: 150.0
@@ -38,6 +47,15 @@ quality:
     pressure:
       mean: 1013.25
       stddev: 10.0
+  scoring:
+    anomaly_penalty: 0.9
+    optional_fields:
+      - temperature
+      - humidity
+      - pressure
+      - battery_level
+      - location
+      - firmware_version
 
 gold:
   window_duration: 1 hour

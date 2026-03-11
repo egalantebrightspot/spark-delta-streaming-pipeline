@@ -58,7 +58,7 @@ def apply_transformations(df: DataFrame, config: dict) -> DataFrame:
     df = normalize_units(df)
     df = tag_anomalies(df, config)
     df = add_zscores(df, config)
-    df = add_quality_score(df)
+    df = add_quality_score(df, config)
     df = df.withColumn("_processed_at", current_timestamp())
     return df
 
@@ -71,7 +71,7 @@ def write_silver_stream(df: DataFrame, config: dict):
     return (
         df.writeStream
         .format("delta")
-        .outputMode("append")
+        .outputMode(streaming_cfg.get("output_mode", "append"))
         .option("checkpointLocation", checkpoint)
         .trigger(processingTime=streaming_cfg.get("trigger_interval", "10 seconds"))
         .start(paths["delta_silver"])

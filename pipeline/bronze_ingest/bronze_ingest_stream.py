@@ -49,7 +49,7 @@ def write_bronze_stream(df: DataFrame, config: dict):
     return (
         df.writeStream
         .format("delta")
-        .outputMode("append")
+        .outputMode(streaming_cfg.get("output_mode", "append"))
         .option("checkpointLocation", checkpoint)
         .trigger(processingTime=streaming_cfg.get("trigger_interval", "10 seconds"))
         .start(paths["delta_bronze"])
