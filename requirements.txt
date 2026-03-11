@@ -1,6 +1,6 @@
 # Core Distributed Processing
-pyspark==3.5.0
-delta-spark==3.1.0
+pyspark==3.5.8
+delta-spark==3.3.2
 
 # Data Handling & Utilities
 pandas==2.2.0

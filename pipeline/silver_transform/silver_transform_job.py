@@ -56,7 +56,7 @@ def main():
     silver = apply_transformations(bronze, config)
     query = write_silver_stream(silver, config)
 
-    logger.info("Silver stream active — awaiting termination")
+    logger.info("Silver stream active - awaiting termination")
     query.awaitTermination()
 
 

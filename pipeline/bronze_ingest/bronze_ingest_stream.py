@@ -1,11 +1,20 @@
-"""Bronze layer: ingest raw IoT telemetry JSON into a Delta table."""
+"""Bronze layer: ingest raw IoT telemetry JSON into a Delta table.
+
+Reads newline-delimited JSON from the landing zone, enforces the raw
+telemetry schema in PERMISSIVE mode (capturing unparseable records),
+stamps each row with ingestion metadata, and writes to a Delta table
+with exactly-once checkpoint semantics.
+"""
 
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import current_timestamp, input_file_name
 
 from pipeline.common.utils import load_config, get_spark_session, ensure_path
 from pipeline.common.logging_config import get_logger
-from pipeline.bronze_ingest.schema import IOT_TELEMETRY_SCHEMA
+from pipeline.bronze_ingest.schema import (
+    IOT_TELEMETRY_SCHEMA,
+    CORRUPT_RECORD_COLUMN,
+)
 
 logger = get_logger("bronze.ingest")
 
@@ -17,6 +26,8 @@ def read_raw_stream(spark, config: dict) -> DataFrame:
     return (
         spark.readStream
         .schema(IOT_TELEMETRY_SCHEMA)
+        .option("mode", "PERMISSIVE")
+        .option("columnNameOfCorruptRecord", CORRUPT_RECORD_COLUMN)
         .option("maxFilesPerTrigger", streaming_cfg.get("max_files_per_trigger", 100))
         .json(paths["bronze_input"])
     )
@@ -38,7 +49,7 @@ def write_bronze_stream(df: DataFrame, config: dict):
     return (
         df.writeStream
         .format("delta")
-        .outputMode(streaming_cfg.get("output_mode", "append"))
+        .outputMode("append")
         .option("checkpointLocation", checkpoint)
         .trigger(processingTime=streaming_cfg.get("trigger_interval", "10 seconds"))
         .start(paths["delta_bronze"])
@@ -51,13 +62,14 @@ def main():
 
     ensure_path(config["paths"]["bronze_input"])
     ensure_path(config["paths"]["delta_bronze"])
+    ensure_path(config["paths"]["checkpoints"])
 
     logger.info("Starting Bronze ingestion stream")
     raw = read_raw_stream(spark, config)
     enriched = add_ingestion_metadata(raw)
     query = write_bronze_stream(enriched, config)
 
-    logger.info("Bronze stream active — awaiting termination")
+    logger.info("Bronze stream active - awaiting termination")
     query.awaitTermination()
 
 

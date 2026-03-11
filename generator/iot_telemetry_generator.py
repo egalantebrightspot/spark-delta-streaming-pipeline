@@ -61,14 +61,14 @@ def main():
     config = load_config()
     output_dir = ensure_path(config["paths"]["bronze_input"])
 
-    logger.info("Starting IoT telemetry generator → %s", output_dir)
+    logger.info("Starting IoT telemetry generator -> %s", output_dir)
 
     batch_num = 0
     try:
         while True:
             path = write_batch(output_dir, batch_size=20)
             batch_num += 1
-            logger.info("Batch %d written → %s", batch_num, path.name)
+            logger.info("Batch %d written -> %s", batch_num, path.name)
             time.sleep(5)
     except KeyboardInterrupt:
         logger.info("Generator stopped after %d batches", batch_num)

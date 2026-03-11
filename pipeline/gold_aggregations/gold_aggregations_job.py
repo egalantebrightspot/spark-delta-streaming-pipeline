@@ -49,7 +49,7 @@ def main():
     gold = build_gold_tables(silver)
     query = write_gold_stream(gold, config)
 
-    logger.info("Gold stream active — awaiting termination")
+    logger.info("Gold stream active - awaiting termination")
     query.awaitTermination()
 
 

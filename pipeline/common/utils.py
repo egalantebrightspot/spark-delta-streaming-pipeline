@@ -1,3 +1,6 @@
+import os
+import sys
+import platform
 from pathlib import Path
 
 import yaml
@@ -12,10 +15,42 @@ def load_config(config_path: str = None) -> dict:
         return yaml.safe_load(f)
 
 
+def _configure_windows_env():
+    """Set HADOOP_HOME and pin PYSPARK_PYTHON on Windows."""
+    if platform.system() != "Windows":
+        return
+
+    if not os.environ.get("HADOOP_HOME"):
+        hadoop_home = r"C:\hadoop"
+        if Path(hadoop_home, "bin", "winutils.exe").exists():
+            os.environ["HADOOP_HOME"] = hadoop_home
+
+    python_exe = sys.executable
+    os.environ.setdefault("PYSPARK_PYTHON", python_exe)
+    os.environ.setdefault("PYSPARK_DRIVER_PYTHON", python_exe)
+
+
+def _build_driver_java_options() -> str:
+    parts = [
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.nio=ALL-UNNAMED",
+    ]
+    if platform.system() == "Windows":
+        hadoop_bin = Path(os.environ.get("HADOOP_HOME", r"C:\hadoop"), "bin")
+        if hadoop_bin.exists():
+            parts.append(f"-Djava.library.path={hadoop_bin.as_posix()}")
+    return " ".join(parts)
+
+
 def get_spark_session(config: dict = None) -> SparkSession:
     if config is None:
         config = load_config()
 
+    _configure_windows_env()
     spark_cfg = config.get("spark", {})
 
     builder = (
@@ -31,6 +66,7 @@ def get_spark_session(config: dict = None) -> SparkSession:
             "spark.sql.shuffle.partitions",
             spark_cfg.get("shuffle_partitions", 4),
         )
+        .config("spark.driver.extraJavaOptions", _build_driver_java_options())
     )
 
     spark = configure_spark_with_delta_pip(builder).getOrCreate()
