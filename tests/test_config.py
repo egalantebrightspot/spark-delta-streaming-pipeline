@@ -83,6 +83,43 @@ class TestLoadConfig:
         with pytest.raises(FileNotFoundError):
             load_config("/nonexistent/path/config.yaml")
 
+    def test_env_var_override(self, tmp_path, monkeypatch):
+        import yaml
+        from pipeline.common.utils import load_config
+
+        custom = {"app": {"environment": "docker"}, "paths": {}}
+        cfg_file = tmp_path / "docker.yaml"
+        cfg_file.write_text(yaml.dump(custom))
+
+        monkeypatch.setenv("PIPELINE_CONFIG_PATH", str(cfg_file))
+        result = load_config()
+        assert result["app"]["environment"] == "docker"
+
+    def test_explicit_path_beats_env_var(self, tmp_path, monkeypatch):
+        import yaml
+        from pipeline.common.utils import load_config
+
+        env_cfg = {"source": "env"}
+        arg_cfg = {"source": "arg"}
+        (tmp_path / "env.yaml").write_text(yaml.dump(env_cfg))
+        (tmp_path / "arg.yaml").write_text(yaml.dump(arg_cfg))
+
+        monkeypatch.setenv("PIPELINE_CONFIG_PATH", str(tmp_path / "env.yaml"))
+        result = load_config(str(tmp_path / "arg.yaml"))
+        assert result["source"] == "arg"
+
+    def test_docker_config_is_valid(self):
+        from pipeline.common.utils import load_config
+
+        docker_cfg = str(
+            Path(__file__).parent.parent / "infra" / "docker" / "config.docker.yaml"
+        )
+        config = load_config(docker_cfg)
+        assert config["app"]["environment"] == "docker"
+        assert config["paths"]["bronze_input"].startswith("/app/data")
+        assert "quality" in config
+        assert "gold" in config
+
 
 # ── ensure_path ──────────────────────────────────────────────────────────────
 

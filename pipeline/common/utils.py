@@ -10,7 +10,10 @@ from delta import configure_spark_with_delta_pip
 
 def load_config(config_path: str = None) -> dict:
     if config_path is None:
-        config_path = Path(__file__).parent / "config.yaml"
+        config_path = os.environ.get(
+            "PIPELINE_CONFIG_PATH",
+            str(Path(__file__).parent / "config.yaml"),
+        )
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
@@ -69,7 +72,10 @@ def get_spark_session(config: dict = None) -> SparkSession:
         .config("spark.driver.extraJavaOptions", _build_driver_java_options())
     )
 
-    spark = configure_spark_with_delta_pip(builder).getOrCreate()
+    if os.environ.get("DELTA_JARS_PREINSTALLED"):
+        spark = builder.getOrCreate()
+    else:
+        spark = configure_spark_with_delta_pip(builder).getOrCreate()
     spark.sparkContext.setLogLevel(spark_cfg.get("log_level", "WARN"))
     return spark
 

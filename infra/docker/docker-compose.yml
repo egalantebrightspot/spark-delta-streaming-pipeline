@@ -1,29 +1,127 @@
-version: "3.9"
-
 services:
+
+  # ── Spark Cluster ──────────────────────────────────────────────────────────
+
   spark-master:
     build:
       context: ../../
       dockerfile: infra/docker/Dockerfile
     container_name: spark-master
+    command: ["master"]
     environment:
-      - SPARK_MODE=master
-      - SPARK_MASTER_HOST=spark-master
+      SPARK_MODE: master
+      SPARK_MASTER_HOST: spark-master
+      SPARK_MASTER_PORT: "7077"
+      SPARK_MASTER_WEBUI_PORT: "8080"
     ports:
-      - "8080:8080"
-      - "7077:7077"
+      - "8080:8080"   # Master Web UI
+      - "7077:7077"   # Cluster manager port
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     volumes:
-      - ../../data:/app/data
+      - pipeline-data:/app/data
+    networks:
+      - spark-net
+    deploy:
+      resources:
+        limits:
+          memory: 1g
 
   spark-worker:
     build:
       context: ../../
       dockerfile: infra/docker/Dockerfile
-    container_name: spark-worker
+    # No container_name — allows scaling with --scale spark-worker=N
+    command: ["worker"]
     environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 1g
+      SPARK_WORKER_CORES: "2"
+      SPARK_WORKER_WEBUI_PORT: "8081"
     depends_on:
-      - spark-master
+      spark-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     volumes:
-      - ../../data:/app/data
+      - pipeline-data:/app/data
+    networks:
+      - spark-net
+    deploy:
+      resources:
+        limits:
+          memory: 1.5g
+
+  # ── Interactive Tools ──────────────────────────────────────────────────────
+
+  jupyter:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile
+    container_name: spark-jupyter
+    command: ["jupyter"]
+    ports:
+      - "8888:8888"
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - pipeline-data:/app/data
+      - ../../notebooks:/app/notebooks
+    networks:
+      - spark-net
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  # ── On-Demand Jobs (activated with: docker compose --profile run ...) ─────
+
+  generator:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile
+    container_name: spark-generator
+    command: ["generator"]
+    volumes:
+      - pipeline-data:/app/data
+    networks:
+      - spark-net
+    profiles:
+      - run
+
+  pipeline:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile
+    container_name: spark-pipeline
+    command: ["pipeline"]
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - pipeline-data:/app/data
+    networks:
+      - spark-net
+    profiles:
+      - run
+
+# ── Infrastructure ───────────────────────────────────────────────────────────
+
+volumes:
+  pipeline-data:
+    driver: local
+
+networks:
+  spark-net:
+    driver: bridge
+    name: spark-pipeline-net
