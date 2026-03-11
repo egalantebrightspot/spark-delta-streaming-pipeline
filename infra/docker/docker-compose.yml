@@ -200,6 +200,28 @@ services:
     profiles:
       - tools
 
+  live-monitor:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile
+    container_name: spark-live-monitor
+    command: ["python", "-m", "monitoring.live_dashboard", "--port", "8050"]
+    environment:
+      PYSPARK_PYTHON: /opt/bitnami/python/bin/python3
+      PYSPARK_DRIVER_PYTHON: /opt/bitnami/python/bin/python3
+    ports:
+      - "8051:8050"
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - pipeline-data:/app/data
+      - pipeline-logs:/app/logs
+    networks:
+      - spark-net
+    profiles:
+      - tools
+
   jupyter:
     build:
       context: ../../

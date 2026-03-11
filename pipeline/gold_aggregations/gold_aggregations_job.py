@@ -7,6 +7,9 @@ Reads the Silver Delta table in batch mode and writes four Gold tables:
   device_health   -- composite health score with risk tier
   ml_features     -- wide feature vector for model consumption
 
+After writing, runs Delta Lake maintenance (OPTIMIZE + VACUUM) across
+all pipeline layers according to the configured retention policy.
+
 Batch mode is the natural fit for the Gold layer because aggregations
 need enough data to be statistically meaningful and downstream consumers
 (BI dashboards, ML models) tolerate refresh latency.
@@ -14,7 +17,7 @@ need enough data to be statistically meaningful and downstream consumers
 
 from pathlib import Path
 
-from pyspark.sql import DataFrame
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import current_timestamp
 
 from pipeline.common.utils import load_config, get_spark_session, ensure_path
@@ -42,6 +45,71 @@ def read_silver_batch(spark, config: dict) -> DataFrame:
 
 def gold_table_path(config: dict, table_name: str) -> str:
     return str(Path(config["paths"]["delta_gold"]) / table_name)
+
+
+def optimize_table(spark: SparkSession, path: str, table_label: str) -> None:
+    """Compact small files in a Delta table via OPTIMIZE."""
+    from delta.tables import DeltaTable
+
+    try:
+        dt = DeltaTable.forPath(spark, path)
+        dt.optimize().executeCompaction()
+        logger.info("OPTIMIZE complete: %s", table_label)
+    except Exception as exc:
+        logger.warning("OPTIMIZE skipped for %s: %s", table_label, exc)
+
+
+def vacuum_table(
+    spark: SparkSession, path: str, retention_hours: float, table_label: str,
+) -> None:
+    """Remove stale data files beyond the retention window."""
+    from delta.tables import DeltaTable
+
+    if retention_hours <= 0:
+        logger.info("VACUUM skipped (indefinite retention): %s", table_label)
+        return
+    try:
+        dt = DeltaTable.forPath(spark, path)
+        dt.vacuum(retention_hours)
+        logger.info(
+            "VACUUM complete (%dh retention): %s",
+            int(retention_hours), table_label,
+        )
+    except Exception as exc:
+        logger.warning("VACUUM skipped for %s: %s", table_label, exc)
+
+
+def run_maintenance(spark: SparkSession, config: dict) -> None:
+    """Run OPTIMIZE and VACUUM across Bronze, Silver, and Gold tables."""
+    maint = config.get("gold", {}).get("maintenance", {})
+    do_optimize = maint.get("optimize_enabled", False)
+    do_vacuum = maint.get("vacuum_enabled", False)
+
+    if not (do_optimize or do_vacuum):
+        logger.info("Delta maintenance disabled — skipping")
+        return
+
+    logger.info("Running Delta Lake maintenance...")
+    paths = config["paths"]
+
+    layers = [
+        ("Bronze", paths["delta_bronze"], maint.get("bronze_retention_hours", 168)),
+        ("Silver", paths["delta_silver"], maint.get("silver_retention_hours", 720)),
+    ]
+    for table_name in GOLD_TABLES:
+        layers.append((
+            f"Gold/{table_name}",
+            gold_table_path(config, table_name),
+            maint.get("gold_retention_hours", 0),
+        ))
+
+    for label, path, retention_hours in layers:
+        if do_optimize:
+            optimize_table(spark, path, label)
+        if do_vacuum:
+            vacuum_table(spark, path, retention_hours, label)
+
+    logger.info("Delta Lake maintenance complete")
 
 
 def build_and_write(spark, config: dict) -> dict[str, int]:
@@ -100,6 +168,8 @@ def main():
         "Gold aggregation complete: %d rows across %d tables",
         total, len(counts),
     )
+
+    run_maintenance(spark, config)
 
 
 if __name__ == "__main__":

@@ -71,6 +71,12 @@ gold:
   risk_tiers:
     healthy: 0.8
     warning: 0.5
+  maintenance:
+    optimize_enabled: true
+    vacuum_enabled: true
+    bronze_retention_hours: 168
+    silver_retention_hours: 720
+    gold_retention_hours: 0
 
 logging:
   root_level: INFO

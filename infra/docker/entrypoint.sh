@@ -42,6 +42,10 @@ case "${1:-help}" in
     exec python scripts/generate_dashboard.py
     ;;
 
+  monitor)
+    exec python -m monitoring.live_dashboard --port "${DASHBOARD_PORT:-8050}"
+    ;;
+
   jupyter)
     exec jupyter lab \
       --ip=0.0.0.0 --port=8888 --no-browser --allow-root \
@@ -70,7 +74,8 @@ Pipeline layers:
   pipeline     Run all three layers (Bronze + Silver + Gold) concurrently
 
 Tools:
-  dashboard    Generate monitoring dashboard report
+  dashboard    Generate monitoring dashboard report (static HTML)
+  monitor      Start live monitoring dashboard on port 8050
   jupyter      Start JupyterLab on port 8888
   test         Run the pytest suite
 

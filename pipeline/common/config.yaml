@@ -143,6 +143,17 @@ gold:
     healthy: 0.8
     warning: 0.5
 
+  # Delta Lake table maintenance.
+  # OPTIMIZE compacts small files for faster reads; VACUUM reclaims stale files.
+  # Retention hours define how long historical data files are kept before VACUUM
+  # removes them (must exceed the longest possible time-travel query window).
+  maintenance:
+    optimize_enabled: true                # Run OPTIMIZE after each Gold build
+    vacuum_enabled: true                  # Run VACUUM after each Gold build
+    bronze_retention_hours: 168           # 7 days
+    silver_retention_hours: 720           # 30 days
+    gold_retention_hours: 0              # 0 = indefinite (never vacuum Gold)
+
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 # Controls Python-level logging for every pipeline layer.

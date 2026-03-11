@@ -86,3 +86,68 @@
 2026-03-11 12:31:38 | gold.aggregations              | INFO    |   anomaly_summary -> 2 rows (C:\Users\ericj\AppData\Local\Temp\pytest-of-ericj\pytest-21\test_gold_idempotent_overwrite0\gold\anomaly_summary)
 2026-03-11 12:31:42 | gold.aggregations              | INFO    |   device_health -> 2 rows (C:\Users\ericj\AppData\Local\Temp\pytest-of-ericj\pytest-21\test_gold_idempotent_overwrite0\gold\device_health)
 2026-03-11 12:31:50 | gold.aggregations              | INFO    |   ml_features -> 2 rows (C:\Users\ericj\AppData\Local\Temp\pytest-of-ericj\pytest-21\test_gold_idempotent_overwrite0\gold\ml_features)
+2026-03-11 13:13:50 | gold.aggregations              | INFO    | Starting Gold batch aggregation
+2026-03-11 13:14:12 | gold.aggregations              | INFO    | Silver input rows: 188
+2026-03-11 13:14:44 | gold.aggregations              | INFO    |   device_summary -> 57 rows (data\delta\gold\device_summary)
+2026-03-11 13:14:57 | gold.aggregations              | INFO    |   anomaly_summary -> 57 rows (data\delta\gold\anomaly_summary)
+2026-03-11 13:15:09 | gold.aggregations              | INFO    |   device_health -> 57 rows (data\delta\gold\device_health)
+2026-03-11 13:15:21 | gold.aggregations              | INFO    |   ml_features -> 57 rows (data\delta\gold\ml_features)
+2026-03-11 13:15:21 | gold.aggregations              | INFO    | Gold aggregation complete: 228 rows across 4 tables
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.address`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.address` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.automotive`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.automotive` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.bank`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Specified locale `en_US` is not available for provider `faker.providers.bank`. Locale reset to `en_GB` for this provider.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.barcode`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.barcode` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.color`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.color` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.company`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.company` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.credit_card`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.credit_card` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.currency`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.currency` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.date_time`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.date_time` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.emoji` does not feature localization. Specified locale `en_US` is not utilized for this provider.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.file` does not feature localization. Specified locale `en_US` is not utilized for this provider.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.geo`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.geo` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.internet`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.internet` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.isbn` does not feature localization. Specified locale `en_US` is not utilized for this provider.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.job`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.job` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.lorem`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.lorem` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.misc`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.misc` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.passport`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.passport` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.person`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.person` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.phone_number`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.phone_number` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.profile` does not feature localization. Specified locale `en_US` is not utilized for this provider.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.python` does not feature localization. Specified locale `en_US` is not utilized for this provider.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.sbn` does not feature localization. Specified locale `en_US` is not utilized for this provider.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Looking for locale `en_US` in provider `faker.providers.ssn`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.ssn` has been localized to `en_US`.
+2026-03-11 13:15:37 | faker.factory                  | DEBUG   | Provider `faker.providers.user_agent` does not feature localization. Specified locale `en_US` is not utilized for this provider.
+2026-03-11 13:17:29 | gold.aggregations              | INFO    | Silver input rows: 6
+2026-03-11 13:17:35 | gold.aggregations              | INFO    |   device_summary -> 3 rows (C:\Users\ericj\AppData\Local\Temp\pytest-of-ericj\pytest-22\test_aggregated_at_added_by_bu0\gold_ts\device_summary)
+2026-03-11 13:17:40 | gold.aggregations              | INFO    |   anomaly_summary -> 3 rows (C:\Users\ericj\AppData\Local\Temp\pytest-of-ericj\pytest-22\test_aggregated_at_added_by_bu0\gold_ts\anomaly_summary)
+2026-03-11 13:17:45 | gold.aggregations              | INFO    |   device_health -> 3 rows (C:\Users\ericj\AppData\Local\Temp\pytest-of-ericj\pytest-22\test_aggregated_at_added_by_bu0\gold_ts\device_health)
+2026-03-11 13:17:52 | gold.aggregations              | INFO    |   ml_features -> 3 rows (C:\Users\ericj\AppData\Local\Temp\pytest-of-ericj\pytest-22\test_aggregated_at_added_by_bu0\gold_ts\ml_features)
+2026-03-11 13:18:18 | gold.aggregations              | INFO    | Silver input rows: 6
+2026-03-11 13:18:29 | gold.aggregations              | INFO    |   device_summary -> 3 rows (C:\Users\ericj\AppData\Local\Temp\pytest-of-ericj\pytest-22\test_build_and_write_produces_0\gold\device_summary)
+2026-03-11 13:18:39 | gold.aggregations              | INFO    |   anomaly_summary -> 3 rows (C:\Users\ericj\AppData\Local\Temp\pytest-of-ericj\pytest-22\test_build_and_write_produces_0\gold\anomaly_summary)
+2026-03-11 13:18:50 | gold.aggregations              | INFO    |   device_health -> 3 rows (C:\Users\ericj\AppData\Local\Temp\pytest-of-ericj\pytest-22\test_build_and_write_produces_0\gold\device_health)
+2026-03-11 13:18:58 | gold.aggregations              | INFO    |   ml_features -> 3 rows (C:\Users\ericj\AppData\Local\Temp\pytest-of-ericj\pytest-22\test_build_and_write_produces_0\gold\ml_features)
+2026-03-11 13:19:02 | gold.aggregations              | INFO    | Silver input rows: 6
+2026-03-11 13:19:06 | gold.aggregations              | INFO    |   device_summary -> 3 rows (C:\Users\ericj\AppData\Local\Temp\pytest-of-ericj\pytest-22\test_gold_tables_are_delta0\gold_rt\device_summary)
+2026-03-11 13:19:11 | gold.aggregations              | INFO    |   anomaly_summary -> 3 rows (C:\Users\ericj\AppData\Local\Temp\pytest-of-ericj\pytest-22\test_gold_tables_are_delta0\gold_rt\anomaly_summary)
+2026-03-11 13:19:15 | gold.aggregations              | INFO    |   device_health -> 3 rows (C:\Users\ericj\AppData\Local\Temp\pytest-of-ericj\pytest-22\test_gold_tables_are_delta0\gold_rt\device_health)
+2026-03-11 13:19:20 | gold.aggregations              | INFO    |   ml_features -> 3 rows (C:\Users\ericj\AppData\Local\Temp\pytest-of-ericj\pytest-22\test_gold_tables_are_delta0\gold_rt\ml_features)
