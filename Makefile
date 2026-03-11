@@ -61,6 +61,9 @@ dashboard:  ## Generate the HTML observability dashboard
 
 validate: validate-bronze validate-silver validate-gold  ## Run all layer validation scripts
 
+governance:  ## Run deterministic data-quality governance test
+	$(PYTHON) scripts/validate_governance.py
+
 validate-bronze:  ## Validate the Bronze Delta table
 	$(PYTHON) scripts/validate_bronze.py
 
