@@ -1,0 +1,32 @@
+app:
+  name: distributed-data-pipeline
+  environment: local
+
+paths:
+  bronze_input: data/bronze_input
+  delta_bronze: data/delta/bronze
+  delta_silver: data/delta/silver
+  delta_gold: data/delta/gold
+  checkpoints: data/delta/checkpoints
+
+spark:
+  master: local[*]
+  app_name: iot-telemetry-pipeline
+  log_level: WARN
+  shuffle_partitions: 4
+
+streaming:
+  trigger_interval: 10 seconds
+  max_files_per_trigger: 100
+  output_mode: append
+
+quality:
+  max_temperature: 150.0
+  min_temperature: -50.0
+  max_humidity: 100.0
+  min_humidity: 0.0
+  dedup_window_hours: 24
+
+monitoring:
+  metrics_interval_seconds: 30
+  dashboard_port: 8050
