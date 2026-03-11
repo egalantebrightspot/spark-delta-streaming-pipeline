@@ -5,24 +5,8 @@ transforms, then tests each Gold aggregation function against it.
 All Spark operations are JVM-native (no Python UDFs).
 """
 
-import json
 import pytest
-from pathlib import Path
 
-from pyspark.sql.functions import col, current_timestamp
-
-from pipeline.bronze_ingest.schema import IOT_TELEMETRY_SCHEMA, CORRUPT_RECORD_COLUMN
-from pipeline.bronze_ingest.bronze_ingest_stream import add_ingestion_metadata
-from pipeline.silver_transform.quality_rules import (
-    drop_corrupt_records,
-    drop_nulls,
-    deduplicate,
-    enforce_schema,
-    normalize_units,
-    tag_anomalies,
-    add_zscores,
-    add_quality_score,
-)
 from pipeline.gold_aggregations.feature_engineering import (
     compute_device_summary,
     compute_anomaly_summary,
@@ -35,85 +19,13 @@ from pipeline.gold_aggregations.gold_aggregations_job import (
     GOLD_TABLES,
 )
 
-QUALITY_CONFIG = {
-    "quality": {
-        "max_temperature": 150.0,
-        "min_temperature": -50.0,
-        "max_humidity": 100.0,
-        "min_humidity": 0.0,
-        "max_pressure": 1100.0,
-        "min_pressure": 900.0,
-        "expected": {
-            "temperature": {"mean": 22.0, "stddev": 5.0},
-            "humidity": {"mean": 55.0, "stddev": 10.0},
-            "pressure": {"mean": 1013.25, "stddev": 10.0},
-        },
-    },
-    "gold": {
-        "window_duration": "1 hour",
-        "health_weights": {"quality": 0.4, "anomaly_rate": 0.3, "battery": 0.3},
-        "risk_tiers": {"healthy": 0.8, "warning": 0.5},
-    },
-}
+from tests.conftest import QUALITY_CONFIG, make_event, write_json, build_silver
 
 
-@pytest.fixture(scope="session")
-def spark():
-    from pipeline.common.utils import get_spark_session
-
-    session = get_spark_session({
-        "spark": {
-            "master": "local[1]",
-            "app_name": "test-gold",
-            "shuffle_partitions": 1,
-            "log_level": "WARN",
-        }
-    })
-    yield session
-    session.stop()
+pytestmark = pytest.mark.unit
 
 
-def _event(**overrides) -> dict:
-    base = {
-        "device_id": "device-0001",
-        "timestamp": "2025-06-01T12:00:00.000000+00:00",
-        "temperature": 22.0,
-        "humidity": 55.0,
-        "pressure": 1013.25,
-        "battery_level": 88.0,
-        "location": "factory-floor-A",
-        "firmware_version": "1.0.0",
-    }
-    base.update(overrides)
-    return base
-
-
-def _write_json(path, events):
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        for e in events:
-            f.write(json.dumps(e) + "\n")
-
-
-def _build_silver(spark, json_path) -> "DataFrame":
-    """Read JSON with Bronze schema and apply full Silver transform chain."""
-    df = (
-        spark.read
-        .schema(IOT_TELEMETRY_SCHEMA)
-        .option("mode", "PERMISSIVE")
-        .option("columnNameOfCorruptRecord", CORRUPT_RECORD_COLUMN)
-        .json(str(json_path))
-    )
-    df = add_ingestion_metadata(df)
-    df = drop_corrupt_records(df)
-    df = drop_nulls(df)
-    df = deduplicate(df)
-    df = enforce_schema(df)
-    df = normalize_units(df)
-    df = tag_anomalies(df, QUALITY_CONFIG)
-    df = add_zscores(df, QUALITY_CONFIG)
-    df = add_quality_score(df)
-    return df.withColumn("_processed_at", current_timestamp())
+# ── Session-scoped Silver fixture with known characteristics ─────────────────
 
 
 @pytest.fixture(scope="session")
@@ -122,24 +34,24 @@ def silver_df(spark, tmp_path_factory):
     data_dir = tmp_path_factory.mktemp("gold_test_data")
     events = [
         # device-0001: 3 normal events in the same hour
-        _event(device_id="device-0001", timestamp="2025-06-01T12:00:00+00:00",
-               temperature=20.0, humidity=50.0, battery_level=90.0),
-        _event(device_id="device-0001", timestamp="2025-06-01T12:01:00+00:00",
-               temperature=22.0, humidity=55.0, battery_level=89.0),
-        _event(device_id="device-0001", timestamp="2025-06-01T12:02:00+00:00",
-               temperature=24.0, humidity=60.0, battery_level=88.0),
+        make_event(device_id="device-0001", timestamp="2025-06-01T12:00:00+00:00",
+                   temperature=20.0, humidity=50.0, battery_level=90.0),
+        make_event(device_id="device-0001", timestamp="2025-06-01T12:01:00+00:00",
+                   temperature=22.0, humidity=55.0, battery_level=89.0),
+        make_event(device_id="device-0001", timestamp="2025-06-01T12:02:00+00:00",
+                   temperature=24.0, humidity=60.0, battery_level=88.0),
         # device-0002: 2 events, one anomalous temperature
-        _event(device_id="device-0002", timestamp="2025-06-01T12:00:00+00:00",
-               temperature=22.0, humidity=55.0, battery_level=75.0),
-        _event(device_id="device-0002", timestamp="2025-06-01T12:01:00+00:00",
-               temperature=200.0, humidity=55.0, battery_level=74.0),
+        make_event(device_id="device-0002", timestamp="2025-06-01T12:00:00+00:00",
+                   temperature=22.0, humidity=55.0, battery_level=75.0),
+        make_event(device_id="device-0002", timestamp="2025-06-01T12:01:00+00:00",
+                   temperature=200.0, humidity=55.0, battery_level=74.0),
         # device-0003: 1 event with anomalous pressure and low battery
-        _event(device_id="device-0003", timestamp="2025-06-01T12:00:00+00:00",
-               temperature=22.0, humidity=55.0, pressure=1200.0,
-               battery_level=15.0),
+        make_event(device_id="device-0003", timestamp="2025-06-01T12:00:00+00:00",
+                   temperature=22.0, humidity=55.0, pressure=1200.0,
+                   battery_level=15.0),
     ]
-    _write_json(data_dir / "test.json", events)
-    return _build_silver(spark, data_dir)
+    write_json(data_dir / "test.json", events)
+    return build_silver(spark, data_dir)
 
 
 # ── compute_device_summary ───────────────────────────────────────────────────
@@ -234,7 +146,6 @@ class TestDeviceHealth:
     def test_low_battery_reduces_score(self, silver_df):
         result = compute_device_health(silver_df, QUALITY_CONFIG, "1 hour")
         d3 = [r for r in result.collect() if r["device_id"] == "device-0003"][0]
-        # Low battery (15%) + anomaly -> lower score
         assert d3["health_score"] < 0.8
 
     def test_risk_tiers_assigned(self, silver_df):
@@ -283,7 +194,6 @@ class TestMLFeatures:
 
     def test_feature_count(self, silver_df):
         result = compute_ml_features(silver_df, "1 hour")
-        # 33 feature columns in total
         assert len(result.columns) >= 30
 
     def test_schema_completeness(self, silver_df):
@@ -311,11 +221,11 @@ class TestSingleEventEdgeCases:
     @pytest.fixture()
     def single_event_silver(self, spark, tmp_path_factory):
         d = tmp_path_factory.mktemp("single")
-        _write_json(d / "data.json", [
-            _event(device_id="solo", temperature=25.0, humidity=60.0,
-                   pressure=1010.0, battery_level=80.0),
+        write_json(d / "data.json", [
+            make_event(device_id="solo", temperature=25.0, humidity=60.0,
+                       pressure=1010.0, battery_level=80.0),
         ])
-        return _build_silver(spark, d)
+        return build_silver(spark, d)
 
     def test_stddev_is_null_for_single_event(self, single_event_silver):
         result = compute_device_summary(single_event_silver, "1 hour")
@@ -344,13 +254,13 @@ class TestAllAnomalousDevice:
     def all_anomaly_silver(self, spark, tmp_path_factory):
         d = tmp_path_factory.mktemp("all_anom")
         events = [
-            _event(device_id="bad-sensor",
-                   timestamp=f"2025-06-01T12:0{i}:00+00:00",
-                   temperature=200.0, battery_level=10.0)
+            make_event(device_id="bad-sensor",
+                       timestamp=f"2025-06-01T12:0{i}:00+00:00",
+                       temperature=200.0, battery_level=10.0)
             for i in range(5)
         ]
-        _write_json(d / "data.json", events)
-        return _build_silver(spark, d)
+        write_json(d / "data.json", events)
+        return build_silver(spark, d)
 
     def test_anomaly_rate_is_one(self, all_anomaly_silver):
         result = compute_device_summary(all_anomaly_silver, "1 hour")
@@ -415,13 +325,13 @@ class TestWindowDurations:
     def multi_hour_silver(self, spark, tmp_path_factory):
         d = tmp_path_factory.mktemp("multi_hour")
         events = [
-            _event(device_id="d1", timestamp="2025-06-01T12:00:00+00:00"),
-            _event(device_id="d1", timestamp="2025-06-01T12:30:00+00:00"),
-            _event(device_id="d1", timestamp="2025-06-01T13:00:00+00:00"),
-            _event(device_id="d1", timestamp="2025-06-01T13:30:00+00:00"),
+            make_event(device_id="d1", timestamp="2025-06-01T12:00:00+00:00"),
+            make_event(device_id="d1", timestamp="2025-06-01T12:30:00+00:00"),
+            make_event(device_id="d1", timestamp="2025-06-01T13:00:00+00:00"),
+            make_event(device_id="d1", timestamp="2025-06-01T13:30:00+00:00"),
         ]
-        _write_json(d / "data.json", events)
-        return _build_silver(spark, d)
+        write_json(d / "data.json", events)
+        return build_silver(spark, d)
 
     def test_30_minute_window_splits_events(self, multi_hour_silver):
         result = compute_device_summary(multi_hour_silver, "30 minutes")
@@ -435,6 +345,7 @@ class TestWindowDurations:
 # ── Aggregated-at timestamp ──────────────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestAggregatedTimestamp:
     def test_aggregated_at_added_by_build_and_write(self, spark, silver_df, tmp_path):
         silver_path = str(tmp_path / "silver_ts")
@@ -472,6 +383,7 @@ class TestMLFeaturesBattery:
 # ── Delta round-trip ─────────────────────────────────────────────────────────
 
 
+@pytest.mark.slow
 class TestGoldDeltaRoundTrip:
     def test_build_and_write_produces_all_tables(self, spark, silver_df, tmp_path):
         silver_path = str(tmp_path / "silver")

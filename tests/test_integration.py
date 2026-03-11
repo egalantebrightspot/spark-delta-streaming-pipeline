@@ -5,11 +5,8 @@ records flow correctly through all three layers and that data governance
 properties are maintained end-to-end.
 """
 
-import json
 import pytest
-from pathlib import Path
-
-from pyspark.sql.functions import col, current_timestamp
+from pyspark.sql.functions import current_timestamp
 
 from pipeline.bronze_ingest.schema import IOT_TELEMETRY_SCHEMA, CORRUPT_RECORD_COLUMN
 from pipeline.bronze_ingest.bronze_ingest_stream import add_ingestion_metadata
@@ -23,80 +20,20 @@ from pipeline.silver_transform.quality_rules import (
     add_zscores,
     add_quality_score,
 )
-from pipeline.gold_aggregations.feature_engineering import (
-    compute_device_summary,
-    compute_anomaly_summary,
-    compute_device_health,
-    compute_ml_features,
-)
 from pipeline.gold_aggregations.gold_aggregations_job import (
     build_and_write,
     gold_table_path,
     GOLD_TABLES,
 )
 
+from tests.conftest import QUALITY_CONFIG, make_event, write_json
+
+
+pytestmark = [pytest.mark.integration, pytest.mark.slow]
 
 PIPELINE_CONFIG = {
-    "quality": {
-        "max_temperature": 150.0,
-        "min_temperature": -50.0,
-        "max_humidity": 100.0,
-        "min_humidity": 0.0,
-        "max_pressure": 1100.0,
-        "min_pressure": 900.0,
-        "expected": {
-            "temperature": {"mean": 22.0, "stddev": 5.0},
-            "humidity": {"mean": 55.0, "stddev": 10.0},
-            "pressure": {"mean": 1013.25, "stddev": 10.0},
-        },
-    },
-    "gold": {
-        "window_duration": "1 hour",
-        "health_weights": {"quality": 0.4, "anomaly_rate": 0.3, "battery": 0.3},
-        "risk_tiers": {"healthy": 0.8, "warning": 0.5},
-    },
+    **QUALITY_CONFIG,
 }
-
-
-@pytest.fixture(scope="session")
-def spark():
-    from pipeline.common.utils import get_spark_session
-
-    session = get_spark_session({
-        "spark": {
-            "master": "local[1]",
-            "app_name": "test-integration",
-            "shuffle_partitions": 1,
-            "log_level": "WARN",
-        }
-    })
-    yield session
-    session.stop()
-
-
-def _event(**overrides) -> dict:
-    base = {
-        "device_id": "device-0001",
-        "timestamp": "2025-06-01T12:00:00.000000+00:00",
-        "temperature": 22.0,
-        "humidity": 55.0,
-        "pressure": 1013.25,
-        "battery_level": 88.0,
-        "location": "factory-floor-A",
-        "firmware_version": "1.0.0",
-    }
-    base.update(overrides)
-    return base
-
-
-def _write_json(path, events):
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        for e in events:
-            if isinstance(e, str):
-                f.write(e + "\n")
-            else:
-                f.write(json.dumps(e) + "\n")
 
 
 class TestBronzeToSilverToGold:
@@ -136,27 +73,27 @@ class TestBronzeToSilverToGold:
 
         events = [
             # Clean devices
-            _event(device_id="d1", timestamp="2025-06-01T12:00:00+00:00",
-                   temperature=21.0, battery_level=95.0),
-            _event(device_id="d1", timestamp="2025-06-01T12:01:00+00:00",
-                   temperature=22.0, battery_level=94.0),
-            _event(device_id="d1", timestamp="2025-06-01T12:02:00+00:00",
-                   temperature=23.0, battery_level=93.0),
+            make_event(device_id="d1", timestamp="2025-06-01T12:00:00+00:00",
+                       temperature=21.0, battery_level=95.0),
+            make_event(device_id="d1", timestamp="2025-06-01T12:01:00+00:00",
+                       temperature=22.0, battery_level=94.0),
+            make_event(device_id="d1", timestamp="2025-06-01T12:02:00+00:00",
+                       temperature=23.0, battery_level=93.0),
             # Anomalous device
-            _event(device_id="d2", timestamp="2025-06-01T12:00:00+00:00",
-                   temperature=200.0, battery_level=50.0),
-            _event(device_id="d2", timestamp="2025-06-01T12:01:00+00:00",
-                   temperature=22.0, battery_level=49.0),
+            make_event(device_id="d2", timestamp="2025-06-01T12:00:00+00:00",
+                       temperature=200.0, battery_level=50.0),
+            make_event(device_id="d2", timestamp="2025-06-01T12:01:00+00:00",
+                       temperature=22.0, battery_level=49.0),
             # Duplicate (should be removed)
-            _event(device_id="d1", timestamp="2025-06-01T12:00:00+00:00",
-                   temperature=21.0, battery_level=95.0),
+            make_event(device_id="d1", timestamp="2025-06-01T12:00:00+00:00",
+                       temperature=21.0, battery_level=95.0),
             # Corrupt record (should be removed)
             "this is not valid json",
             # Low battery device with pressure anomaly
-            _event(device_id="d3", timestamp="2025-06-01T12:00:00+00:00",
-                   temperature=22.0, pressure=1200.0, battery_level=10.0),
+            make_event(device_id="d3", timestamp="2025-06-01T12:00:00+00:00",
+                       temperature=22.0, pressure=1200.0, battery_level=10.0),
         ]
-        _write_json(raw_dir / "events.json", events)
+        write_json(raw_dir / "events.json", events)
 
         # Bronze
         bronze_df = self._run_bronze(spark, raw_dir, bronze_dir)
@@ -192,12 +129,12 @@ class TestBronzeToSilverToGold:
         gold_dir = tmp_path / "gold"
 
         events = [
-            _event(device_id="sensor-A", timestamp="2025-06-01T12:00:00+00:00",
-                   temperature=200.0),
-            _event(device_id="sensor-A", timestamp="2025-06-01T12:01:00+00:00",
-                   temperature=22.0),
+            make_event(device_id="sensor-A", timestamp="2025-06-01T12:00:00+00:00",
+                       temperature=200.0),
+            make_event(device_id="sensor-A", timestamp="2025-06-01T12:01:00+00:00",
+                       temperature=22.0),
         ]
-        _write_json(raw_dir / "events.json", events)
+        write_json(raw_dir / "events.json", events)
 
         bronze_df = self._run_bronze(spark, raw_dir, bronze_dir)
         self._run_silver(bronze_df, silver_dir)
@@ -226,9 +163,9 @@ class TestBronzeToSilverToGold:
         gold_dir = tmp_path / "gold"
 
         events = [
-            _event(device_id="clean", timestamp="2025-06-01T12:00:00+00:00"),
+            make_event(device_id="clean", timestamp="2025-06-01T12:00:00+00:00"),
         ]
-        _write_json(raw_dir / "events.json", events)
+        write_json(raw_dir / "events.json", events)
 
         bronze_df = self._run_bronze(spark, raw_dir, bronze_dir)
         self._run_silver(bronze_df, silver_dir)
@@ -256,10 +193,10 @@ class TestBronzeToSilverToGold:
         silver_dir = tmp_path / "silver"
         gold_dir = tmp_path / "gold"
 
-        same_event = _event(device_id="duper",
-                            timestamp="2025-06-01T12:00:00+00:00")
+        same_event = make_event(device_id="duper",
+                                timestamp="2025-06-01T12:00:00+00:00")
         events = [same_event] * 10
-        _write_json(raw_dir / "events.json", events)
+        write_json(raw_dir / "events.json", events)
 
         bronze_df = self._run_bronze(spark, raw_dir, bronze_dir)
         assert bronze_df.count() == 10
@@ -290,10 +227,10 @@ class TestBronzeToSilverToGold:
         gold_dir = tmp_path / "gold"
 
         events = [
-            _event(device_id="d1", timestamp="2025-06-01T12:00:00+00:00"),
-            _event(device_id="d2", timestamp="2025-06-01T12:01:00+00:00"),
+            make_event(device_id="d1", timestamp="2025-06-01T12:00:00+00:00"),
+            make_event(device_id="d2", timestamp="2025-06-01T12:01:00+00:00"),
         ]
-        _write_json(raw_dir / "events.json", events)
+        write_json(raw_dir / "events.json", events)
 
         bronze_df = self._run_bronze(spark, raw_dir, bronze_dir)
         self._run_silver(bronze_df, silver_dir)

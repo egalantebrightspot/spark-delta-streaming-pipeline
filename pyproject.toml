@@ -1,0 +1,15 @@
+[project]
+name = "spark-delta-streaming-pipeline"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: fast, isolated tests with no external dependencies",
+    "integration: cross-layer tests that exercise Bronze -> Silver -> Gold",
+    "slow: tests that take >10s (e.g. full Delta round-trips)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::FutureWarning",
+]

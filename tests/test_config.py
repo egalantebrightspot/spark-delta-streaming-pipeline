@@ -7,6 +7,9 @@ import pytest
 from pathlib import Path
 
 
+pytestmark = pytest.mark.unit
+
+
 # ── load_config ──────────────────────────────────────────────────────────────
 
 

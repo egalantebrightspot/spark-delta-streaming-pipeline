@@ -7,9 +7,6 @@ Delta writes) to avoid the Python-worker crash on Windows + Python 3.12+
 
 import json
 import pytest
-from pathlib import Path
-
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 
 from pipeline.bronze_ingest.schema import (
@@ -18,42 +15,7 @@ from pipeline.bronze_ingest.schema import (
 )
 from pipeline.bronze_ingest.bronze_ingest_stream import add_ingestion_metadata
 
-
-@pytest.fixture(scope="session")
-def spark():
-    from pipeline.common.utils import get_spark_session
-
-    session = get_spark_session({
-        "spark": {
-            "master": "local[1]",
-            "app_name": "test-bronze",
-            "shuffle_partitions": 1,
-            "log_level": "WARN",
-        }
-    })
-    yield session
-    session.stop()
-
-
-def _make_event(**overrides) -> dict:
-    base = {
-        "device_id": "device-0001",
-        "timestamp": "2025-06-01T12:00:00.000000+00:00",
-        "temperature": 22.5,
-        "humidity": 55.0,
-        "pressure": 1013.25,
-        "battery_level": 88.0,
-        "location": "factory-floor-A",
-        "firmware_version": "1.0.0",
-    }
-    base.update(overrides)
-    return base
-
-
-def _write_json(path, events):
-    with open(path, "w") as f:
-        for e in events:
-            f.write(json.dumps(e) + "\n")
+from tests.conftest import make_event, write_json
 
 
 def _read_with_schema(spark, path):
@@ -66,7 +28,10 @@ def _read_with_schema(spark, path):
     )
 
 
-# -- Schema structure ---------------------------------------------------------
+# -- Schema structure (pure unit tests — no Spark session needed) -------------
+
+
+pytestmark = pytest.mark.unit
 
 
 def test_schema_has_required_fields():
@@ -79,17 +44,20 @@ def test_schema_has_required_fields():
     assert CORRUPT_RECORD_COLUMN in field_names
 
 
-def test_schema_field_types():
-    from pyspark.sql.types import StringType, DoubleType, TimestampType
-
-    type_map = {f.name: type(f.dataType) for f in IOT_TELEMETRY_SCHEMA.fields}
-    assert type_map["device_id"] is StringType
-    assert type_map["timestamp"] is TimestampType
-    for numeric in ["temperature", "humidity", "pressure", "battery_level"]:
-        assert type_map[numeric] is DoubleType, f"{numeric} should be DoubleType"
-    assert type_map["location"] is StringType
-    assert type_map["firmware_version"] is StringType
-    assert type_map[CORRUPT_RECORD_COLUMN] is StringType
+@pytest.mark.parametrize("field,expected_type", [
+    ("device_id", "StringType"),
+    ("timestamp", "TimestampType"),
+    ("temperature", "DoubleType"),
+    ("humidity", "DoubleType"),
+    ("pressure", "DoubleType"),
+    ("battery_level", "DoubleType"),
+    ("location", "StringType"),
+    ("firmware_version", "StringType"),
+    (CORRUPT_RECORD_COLUMN, "StringType"),
+])
+def test_schema_field_types(field, expected_type):
+    type_map = {f.name: type(f.dataType).__name__ for f in IOT_TELEMETRY_SCHEMA.fields}
+    assert type_map[field] == expected_type, f"{field} should be {expected_type}"
 
 
 def test_schema_field_count():
@@ -104,11 +72,11 @@ def test_schema_nullable_flags():
     assert fields["humidity"] is True
 
 
-# -- Ingestion metadata (JVM-only via JSON read) -----------------------------
+# -- Ingestion metadata -------------------------------------------------------
 
 
 def test_add_ingestion_metadata(spark, tmp_path):
-    _write_json(tmp_path / "meta.json", [_make_event()])
+    write_json(tmp_path / "meta.json", [make_event()])
     df = _read_with_schema(spark, tmp_path)
     result = add_ingestion_metadata(df)
 
@@ -117,11 +85,11 @@ def test_add_ingestion_metadata(spark, tmp_path):
     assert result.count() == 1
 
 
-# -- JSON parsing / schema enforcement ---------------------------------------
+# -- JSON parsing / schema enforcement ----------------------------------------
 
 
 def test_valid_json_parses_correctly(spark, tmp_path):
-    _write_json(tmp_path / "valid.json", [_make_event()])
+    write_json(tmp_path / "valid.json", [make_event()])
     df = _read_with_schema(spark, tmp_path)
 
     assert df.count() == 1
@@ -132,7 +100,7 @@ def test_valid_json_parses_correctly(spark, tmp_path):
 
 
 def test_timestamp_parsed_as_timestamp_type(spark, tmp_path):
-    _write_json(tmp_path / "ts.json", [_make_event()])
+    write_json(tmp_path / "ts.json", [make_event()])
     df = _read_with_schema(spark, tmp_path)
 
     ts_field = next(f for f in df.schema.fields if f.name == "timestamp")
@@ -142,8 +110,8 @@ def test_timestamp_parsed_as_timestamp_type(spark, tmp_path):
 
 
 def test_multiple_events_in_batch(spark, tmp_path):
-    events = [_make_event(device_id=f"device-{i:04d}") for i in range(10)]
-    _write_json(tmp_path / "batch.json", events)
+    events = [make_event(device_id=f"device-{i:04d}") for i in range(10)]
+    write_json(tmp_path / "batch.json", events)
     df = _read_with_schema(spark, tmp_path)
 
     assert df.count() == 10
@@ -162,9 +130,9 @@ def test_corrupt_json_captured(spark, tmp_path):
 
 def test_mixed_valid_and_corrupt(spark, tmp_path):
     with open(tmp_path / "mixed.json", "w") as f:
-        f.write(json.dumps(_make_event()) + "\n")
+        f.write(json.dumps(make_event()) + "\n")
         f.write("bad record\n")
-        f.write(json.dumps(_make_event(device_id="device-0002")) + "\n")
+        f.write(json.dumps(make_event(device_id="device-0002")) + "\n")
 
     df = _read_with_schema(spark, tmp_path).cache()
 
@@ -181,10 +149,10 @@ def test_mixed_valid_and_corrupt(spark, tmp_path):
 
 def test_extra_json_fields_ignored(spark, tmp_path):
     """Fields not in the schema should be silently dropped."""
-    event = _make_event()
+    event = make_event()
     event["rogue_field"] = "should_not_appear"
     event["extra_number"] = 999
-    _write_json(tmp_path / "extra.json", [event])
+    write_json(tmp_path / "extra.json", [event])
     df = _read_with_schema(spark, tmp_path)
 
     assert df.count() == 1
@@ -233,24 +201,25 @@ def test_partial_json_missing_optional_fields(spark, tmp_path):
 
 
 def test_numeric_precision_preserved(spark, tmp_path):
-    _write_json(tmp_path / "precision.json", [
-        _make_event(temperature=22.123456789),
+    write_json(tmp_path / "precision.json", [
+        make_event(temperature=22.123456789),
     ])
     df = _read_with_schema(spark, tmp_path)
     temp = df.first()["temperature"]
     assert abs(temp - 22.123456789) < 1e-6
 
 
-# -- Delta round-trip ---------------------------------------------------------
+# -- Delta round-trip ----------------------------------------------------------
 
 
+@pytest.mark.slow
 def test_bronze_delta_round_trip(spark, tmp_path):
     input_dir = tmp_path / "input"
     delta_dir = tmp_path / "delta_bronze"
     input_dir.mkdir()
 
-    events = [_make_event(device_id=f"device-{i:04d}") for i in range(5)]
-    _write_json(input_dir / "batch.json", events)
+    events = [make_event(device_id=f"device-{i:04d}") for i in range(5)]
+    write_json(input_dir / "batch.json", events)
 
     df = _read_with_schema(spark, input_dir)
     enriched = add_ingestion_metadata(df)
