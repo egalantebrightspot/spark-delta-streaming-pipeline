@@ -25,7 +25,29 @@ quality:
   min_temperature: -50.0
   max_humidity: 100.0
   min_humidity: 0.0
+  max_pressure: 1100.0
+  min_pressure: 900.0
   dedup_window_hours: 24
+  expected:
+    temperature:
+      mean: 22.0
+      stddev: 5.0
+    humidity:
+      mean: 55.0
+      stddev: 10.0
+    pressure:
+      mean: 1013.25
+      stddev: 10.0
+
+gold:
+  window_duration: 1 hour
+  health_weights:
+    quality: 0.4
+    anomaly_rate: 0.3
+    battery: 0.3
+  risk_tiers:
+    healthy: 0.8
+    warning: 0.5
 
 monitoring:
   metrics_interval_seconds: 30

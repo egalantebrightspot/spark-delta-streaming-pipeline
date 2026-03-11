@@ -79,6 +79,31 @@ def test_schema_has_required_fields():
     assert CORRUPT_RECORD_COLUMN in field_names
 
 
+def test_schema_field_types():
+    from pyspark.sql.types import StringType, DoubleType, TimestampType
+
+    type_map = {f.name: type(f.dataType) for f in IOT_TELEMETRY_SCHEMA.fields}
+    assert type_map["device_id"] is StringType
+    assert type_map["timestamp"] is TimestampType
+    for numeric in ["temperature", "humidity", "pressure", "battery_level"]:
+        assert type_map[numeric] is DoubleType, f"{numeric} should be DoubleType"
+    assert type_map["location"] is StringType
+    assert type_map["firmware_version"] is StringType
+    assert type_map[CORRUPT_RECORD_COLUMN] is StringType
+
+
+def test_schema_field_count():
+    assert len(IOT_TELEMETRY_SCHEMA.fields) == 9
+
+
+def test_schema_nullable_flags():
+    fields = {f.name: f.nullable for f in IOT_TELEMETRY_SCHEMA.fields}
+    assert fields["device_id"] is False
+    assert fields["timestamp"] is False
+    assert fields["temperature"] is True
+    assert fields["humidity"] is True
+
+
 # -- Ingestion metadata (JVM-only via JSON read) -----------------------------
 
 
@@ -149,6 +174,71 @@ def test_mixed_valid_and_corrupt(spark, tmp_path):
     assert valid.count() == 2
     assert corrupt.count() == 1
     df.unpersist()
+
+
+# -- Schema enforcement edge cases --------------------------------------------
+
+
+def test_extra_json_fields_ignored(spark, tmp_path):
+    """Fields not in the schema should be silently dropped."""
+    event = _make_event()
+    event["rogue_field"] = "should_not_appear"
+    event["extra_number"] = 999
+    _write_json(tmp_path / "extra.json", [event])
+    df = _read_with_schema(spark, tmp_path)
+
+    assert df.count() == 1
+    assert "rogue_field" not in df.columns
+    assert "extra_number" not in df.columns
+    assert df.first()["device_id"] == "device-0001"
+
+
+def test_wrong_type_for_numeric_field(spark, tmp_path):
+    """A string in a DoubleType field should produce a corrupt record."""
+    raw = '{"device_id":"d1","timestamp":"2025-06-01T12:00:00+00:00","temperature":"not_a_number","humidity":55.0,"pressure":1013.0,"battery_level":88.0,"location":"A","firmware_version":"1.0.0"}\n'
+    (tmp_path / "badtype.json").write_text(raw)
+    df = _read_with_schema(spark, tmp_path)
+
+    row = df.first()
+    assert row["temperature"] is None or row[CORRUPT_RECORD_COLUMN] is not None
+
+
+def test_empty_json_file(spark, tmp_path):
+    (tmp_path / "empty.json").write_text("")
+    df = _read_with_schema(spark, tmp_path)
+    assert df.count() == 0
+
+
+def test_null_device_id_in_json(spark, tmp_path):
+    """device_id: null in valid JSON structure should still parse."""
+    raw = '{"device_id":null,"timestamp":"2025-06-01T12:00:00+00:00","temperature":22.0,"humidity":55.0,"pressure":1013.0,"battery_level":88.0,"location":"A","firmware_version":"1.0.0"}\n'
+    (tmp_path / "nullid.json").write_text(raw)
+    df = _read_with_schema(spark, tmp_path)
+
+    assert df.count() == 1
+    assert df.first()["device_id"] is None
+
+
+def test_partial_json_missing_optional_fields(spark, tmp_path):
+    """JSON with only required fields should parse without corrupt flag."""
+    raw = '{"device_id":"d1","timestamp":"2025-06-01T12:00:00+00:00"}\n'
+    (tmp_path / "partial.json").write_text(raw)
+    df = _read_with_schema(spark, tmp_path)
+
+    row = df.first()
+    assert row["device_id"] == "d1"
+    assert row["temperature"] is None
+    assert row["humidity"] is None
+    assert row[CORRUPT_RECORD_COLUMN] is None
+
+
+def test_numeric_precision_preserved(spark, tmp_path):
+    _write_json(tmp_path / "precision.json", [
+        _make_event(temperature=22.123456789),
+    ])
+    df = _read_with_schema(spark, tmp_path)
+    temp = df.first()["temperature"]
+    assert abs(temp - 22.123456789) < 1e-6
 
 
 # -- Delta round-trip ---------------------------------------------------------
