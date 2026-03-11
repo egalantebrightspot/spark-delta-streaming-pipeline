@@ -37,6 +37,11 @@ spark:
   app_name: iot-telemetry-pipeline
   log_level: WARN                      # ALL | DEBUG | INFO | WARN | ERROR
   shuffle_partitions: 4                # Low for local dev; increase to 200+ for cluster
+  driver_memory: 2g                    # JVM heap for driver (= total mem in local mode)
+  timezone: UTC                        # Forces spark.sql.session.timeZone — critical for
+                                       #   cross-environment timestamp consistency
+  adaptive_enabled: true               # Adaptive Query Execution — dynamic join/partition tuning
+  delta_auto_merge: true               # Allow Delta schema evolution on write
 
 
 # ── Streaming Configuration ──────────────────────────────────────────────────
@@ -137,6 +142,34 @@ gold:
   risk_tiers:
     healthy: 0.8
     warning: 0.5
+
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+# Controls Python-level logging for every pipeline layer.
+# PySpark/JVM logging is controlled separately by spark.log_level above.
+
+logging:
+  root_level: INFO                     # Default level for loggers without a per-layer override
+  log_dir: logs                        # Directory for rotating log files (created automatically)
+  max_bytes: 10485760                  # 10 MB — max size per log file before rotation
+  backup_count: 5                      # Number of rotated files to keep
+
+  console:
+    enabled: true
+    level: INFO                        # Minimum level printed to stdout
+
+  file:
+    enabled: true
+    level: DEBUG                       # File captures everything for post-mortem analysis
+
+  # Per-layer overrides.  The layer is the first segment of the logger name
+  # (e.g. "bronze.ingest" → layer "bronze").
+  layers:
+    bronze: DEBUG                      # Noisy layer — keep DEBUG for ingestion troubleshooting
+    silver: INFO
+    gold: INFO
+    generator: INFO
+    monitoring: INFO
 
 
 # ── Monitoring & Observability ───────────────────────────────────────────────

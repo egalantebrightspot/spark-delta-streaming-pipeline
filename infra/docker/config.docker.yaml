@@ -1,5 +1,6 @@
 # Docker environment configuration overlay.
 # Mirrors pipeline/common/config.yaml with container-absolute paths.
+# Loaded via PIPELINE_CONFIG_PATH=/app/config.docker.yaml (set in Dockerfile).
 
 app:
   name: distributed-data-pipeline
@@ -13,10 +14,14 @@ paths:
   checkpoints:  /app/data/delta/checkpoints
 
 spark:
-  master: "local[*]"
+  master: "spark://spark-master:7077"
   app_name: iot-telemetry-pipeline-docker
   log_level: WARN
   shuffle_partitions: 4
+  driver_memory: 2g
+  timezone: UTC
+  adaptive_enabled: true
+  delta_auto_merge: true
 
 streaming:
   trigger_interval: 10 seconds
@@ -66,6 +71,24 @@ gold:
   risk_tiers:
     healthy: 0.8
     warning: 0.5
+
+logging:
+  root_level: INFO
+  log_dir: /app/logs
+  max_bytes: 10485760
+  backup_count: 5
+  console:
+    enabled: true
+    level: INFO
+  file:
+    enabled: true
+    level: DEBUG
+  layers:
+    bronze: DEBUG
+    silver: INFO
+    gold: INFO
+    generator: INFO
+    monitoring: INFO
 
 monitoring:
   metrics_interval_seconds: 30

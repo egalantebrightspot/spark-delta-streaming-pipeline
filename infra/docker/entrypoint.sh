@@ -24,7 +24,21 @@ case "${1:-help}" in
     exec python -m pipeline.gold_aggregations.gold_aggregations_job
     ;;
 
-  pipeline|dashboard)
+  pipeline)
+    python -m pipeline.bronze_ingest.bronze_ingest_stream &
+    BRONZE_PID=$!
+    sleep 5
+    python -m pipeline.silver_transform.silver_transform_job &
+    SILVER_PID=$!
+    sleep 5
+    python -m pipeline.gold_aggregations.gold_aggregations_job &
+    GOLD_PID=$!
+    echo "Pipeline started: bronze=$BRONZE_PID silver=$SILVER_PID gold=$GOLD_PID"
+    wait -n
+    kill $BRONZE_PID $SILVER_PID $GOLD_PID 2>/dev/null
+    ;;
+
+  dashboard)
     exec python scripts/generate_dashboard.py
     ;;
 
@@ -48,14 +62,15 @@ Cluster:
   master       Start Spark master node
   worker       Start Spark worker node
 
-Pipeline:
+Pipeline layers:
   generator    Run IoT telemetry data generator
   bronze       Run Bronze ingestion stream
   silver       Run Silver transformation stream
   gold         Run Gold aggregation batch job
-  pipeline     Run full pipeline (Bronze -> Silver -> Gold -> Dashboard)
+  pipeline     Run all three layers (Bronze + Silver + Gold) concurrently
 
 Tools:
+  dashboard    Generate monitoring dashboard report
   jupyter      Start JupyterLab on port 8888
   test         Run the pytest suite
 

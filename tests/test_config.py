@@ -163,6 +163,40 @@ class TestLoadConfig:
         ))
         assert set(local_cfg.keys()) == set(docker_cfg.keys())
 
+    def test_spark_timezone_is_utc(self):
+        from pipeline.common.utils import load_config
+
+        config = load_config()
+        assert config["spark"]["timezone"] == "UTC"
+
+    def test_spark_adaptive_enabled(self):
+        from pipeline.common.utils import load_config
+
+        config = load_config()
+        assert config["spark"]["adaptive_enabled"] is True
+
+    def test_spark_driver_memory_present(self):
+        from pipeline.common.utils import load_config
+
+        config = load_config()
+        assert "driver_memory" in config["spark"]
+        assert config["spark"]["driver_memory"].endswith("g")
+
+    def test_spark_delta_auto_merge_enabled(self):
+        from pipeline.common.utils import load_config
+
+        config = load_config()
+        assert config["spark"]["delta_auto_merge"] is True
+
+    def test_docker_spark_section_matches_local_keys(self):
+        from pipeline.common.utils import load_config
+
+        local_spark = set(load_config()["spark"].keys())
+        docker_spark = set(load_config(str(
+            Path(__file__).parent.parent / "infra" / "docker" / "config.docker.yaml"
+        ))["spark"].keys())
+        assert local_spark == docker_spark
+
 
 # ── ensure_path ──────────────────────────────────────────────────────────────
 
@@ -195,6 +229,18 @@ class TestEnsurePath:
 
         result = ensure_path(str(tmp_path))
         assert result == tmp_path
+
+    def test_empty_string_raises_value_error(self):
+        from pipeline.common.utils import ensure_path
+
+        with pytest.raises(ValueError, match="non-empty"):
+            ensure_path("")
+
+    def test_none_raises_value_error(self):
+        from pipeline.common.utils import ensure_path
+
+        with pytest.raises(ValueError, match="non-empty"):
+            ensure_path(None)
 
 
 # ── Schema module ────────────────────────────────────────────────────────────

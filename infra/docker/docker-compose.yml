@@ -24,6 +24,7 @@ services:
       start_period: 30s
     volumes:
       - pipeline-data:/app/data
+      - pipeline-logs:/app/logs
     networks:
       - spark-net
     deploy:
@@ -54,6 +55,7 @@ services:
       start_period: 30s
     volumes:
       - pipeline-data:/app/data
+      - pipeline-logs:/app/logs
     networks:
       - spark-net
     deploy:
@@ -61,7 +63,142 @@ services:
         limits:
           memory: 1.5g
 
+  # ── Pipeline Layers (activated with: docker compose --profile pipeline ...) ─
+
+  bronze:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile
+    container_name: spark-bronze
+    command: ["bronze"]
+    environment:
+      PYSPARK_PYTHON: /opt/bitnami/python/bin/python3
+      PYSPARK_DRIVER_PYTHON: /opt/bitnami/python/bin/python3
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - pipeline-data:/app/data
+      - pipeline-logs:/app/logs
+    networks:
+      - spark-net
+    profiles:
+      - pipeline
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  silver:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile
+    container_name: spark-silver
+    command: ["silver"]
+    environment:
+      PYSPARK_PYTHON: /opt/bitnami/python/bin/python3
+      PYSPARK_DRIVER_PYTHON: /opt/bitnami/python/bin/python3
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - pipeline-data:/app/data
+      - pipeline-logs:/app/logs
+    networks:
+      - spark-net
+    profiles:
+      - pipeline
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  gold:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile
+    container_name: spark-gold
+    command: ["gold"]
+    environment:
+      PYSPARK_PYTHON: /opt/bitnami/python/bin/python3
+      PYSPARK_DRIVER_PYTHON: /opt/bitnami/python/bin/python3
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - pipeline-data:/app/data
+      - pipeline-logs:/app/logs
+    networks:
+      - spark-net
+    profiles:
+      - pipeline
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  # ── Data Generator (activated with: docker compose --profile run ...) ──────
+
+  generator:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile
+    container_name: spark-generator
+    command: ["generator"]
+    volumes:
+      - pipeline-data:/app/data
+      - pipeline-logs:/app/logs
+    networks:
+      - spark-net
+    profiles:
+      - run
+
+  # ── Full Pipeline (activated with: docker compose --profile run ...) ───────
+
+  pipeline:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile
+    container_name: spark-pipeline
+    command: ["pipeline"]
+    environment:
+      PYSPARK_PYTHON: /opt/bitnami/python/bin/python3
+      PYSPARK_DRIVER_PYTHON: /opt/bitnami/python/bin/python3
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - pipeline-data:/app/data
+      - pipeline-logs:/app/logs
+    networks:
+      - spark-net
+    profiles:
+      - run
+    deploy:
+      resources:
+        limits:
+          memory: 3g
+
   # ── Interactive Tools ──────────────────────────────────────────────────────
+
+  dashboard:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile
+    container_name: spark-dashboard
+    command: ["dashboard"]
+    ports:
+      - "8050:8050"
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    volumes:
+      - pipeline-data:/app/data
+      - pipeline-logs:/app/logs
+    networks:
+      - spark-net
+    profiles:
+      - tools
 
   jupyter:
     build:
@@ -76,49 +213,23 @@ services:
         condition: service_healthy
     volumes:
       - pipeline-data:/app/data
+      - pipeline-logs:/app/logs
       - ../../notebooks:/app/notebooks
     networks:
       - spark-net
+    profiles:
+      - tools
     deploy:
       resources:
         limits:
           memory: 1g
 
-  # ── On-Demand Jobs (activated with: docker compose --profile run ...) ─────
-
-  generator:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile
-    container_name: spark-generator
-    command: ["generator"]
-    volumes:
-      - pipeline-data:/app/data
-    networks:
-      - spark-net
-    profiles:
-      - run
-
-  pipeline:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile
-    container_name: spark-pipeline
-    command: ["pipeline"]
-    depends_on:
-      spark-master:
-        condition: service_healthy
-    volumes:
-      - pipeline-data:/app/data
-    networks:
-      - spark-net
-    profiles:
-      - run
-
 # ── Infrastructure ───────────────────────────────────────────────────────────
 
 volumes:
   pipeline-data:
+    driver: local
+  pipeline-logs:
     driver: local
 
 networks:

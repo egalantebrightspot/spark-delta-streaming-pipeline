@@ -32,7 +32,7 @@ COPY infra/docker/config.docker.yaml ./config.docker.yaml
 COPY infra/docker/entrypoint.sh      ./entrypoint.sh
 
 RUN chmod +x ./entrypoint.sh && \
-    mkdir -p /app/data && \
+    mkdir -p /app/data /app/logs && \
     chown -R 1001:1001 /app
 
 ENV PYTHONPATH=/app
